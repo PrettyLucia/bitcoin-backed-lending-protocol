@@ -136,3 +136,44 @@
   )
 )
 
+;; Update risk parameters
+(define-public (update-risk-parameters (risk-level uint) (collateral-factor uint) (interest-multiplier uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (<= collateral-factor u9000) (err ERR_INVALID_AMOUNT)) ;; Max 90% LTV
+    
+    (map-set risk-parameters { risk-level: risk-level }
+      { 
+        collateral-factor: collateral-factor,
+        interest-multiplier: interest-multiplier
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Toggle protocol pause state
+(define-public (toggle-protocol-pause)
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (var-set protocol-paused (not (var-get protocol-paused)))
+    (ok (var-get protocol-paused))
+  )
+)
+
+;; Update protocol parameters
+(define-public (update-protocol-parameters 
+                (new-min-borrow uint) 
+                (new-max-utilization uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (>= new-max-utilization u5000) (err ERR_INVALID_AMOUNT)) ;; Min 50% utilization
+    (asserts! (<= new-max-utilization u9500) (err ERR_INVALID_AMOUNT)) ;; Max 95% utilization
+    
+    (var-set min-borrow-amount new-min-borrow)
+    (var-set max-utilization new-max-utilization)
+    
+    (ok true)
+  )
+)
