@@ -45,3 +45,24 @@
   { btc-address: (buff 33) }
   { stacks-owner: principal, verified: bool }
 )
+
+;; Pool state
+(define-data-var total-collateral uint u0)     ;; Total BTC collateral (in satoshis)
+(define-data-var total-borrowed uint u0)       ;; Total borrowed (in micro-USD)
+(define-data-var total-reserves uint u0)       ;; Protocol reserves (in micro-USD)
+(define-data-var last-accrual-time uint u0)    ;; Last time interest was accrued
+(define-data-var current-interest-rate uint u0) ;; Current interest rate (in basis points)
+
+;; Protocol status
+(define-data-var protocol-paused bool false)  ;; Emergency pause switch
+(define-data-var min-borrow-amount uint u50000000)  ;; Minimum borrow amount (50 USD)
+(define-data-var max-utilization uint u9000)  ;; Max utilization rate (90%)
+
+;; Risk parameters
+(define-map risk-parameters
+  { risk-level: uint }
+  {
+    collateral-factor: uint,  ;; How much can be borrowed against collateral
+    interest-multiplier: uint ;; Interest rate multiplier
+  }
+)
