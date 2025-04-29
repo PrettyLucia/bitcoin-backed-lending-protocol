@@ -82,3 +82,57 @@
 (define-constant ERR_NOT_LIQUIDATABLE u9)
 (define-constant ERR_MIN_BORROW u10)
 (define-constant ERR_INSUFFICIENT_FUNDS u11)
+
+;; Helper for fixed-point multiplication
+(define-private (mul-div (a uint) (b uint) (c uint))
+  (/ (* a b) c)
+)
+
+;; Calculate the collateralization ratio for a position
+(define-private (get-collateral-ratio (collateral uint) (borrowed uint) (btc-price uint))
+  (if (is-eq borrowed u0)
+    ;; If nothing is borrowed, return max uint
+    (- (pow u2 u128) u1)
+    ;; Otherwise, calculate collateralization ratio
+    ;; (collateral * btc-price * 10000) / borrowed
+    (mul-div 
+      (mul-div collateral btc-price PRECISION)
+      u10000
+      borrowed
+    )
+  )
+)
+
+;; Check if a position can be liquidated
+(define-private (is-liquidatable (user principal) (btc-price uint))
+  (let
+    (
+      (position (unwrap! (map-get? user-positions { user: user }) false))
+      (collateral (get btc-collateral position))
+      (borrowed (get borrowed-amount position))
+      (collateral-value (mul-div collateral btc-price PRECISION))
+      (collateral-ratio (get-collateral-ratio collateral borrowed btc-price))
+    )
+    (< collateral-ratio LIQUIDATION_THRESHOLD)
+  )
+)
+
+;; Initialize the protocol
+(define-public (initialize)
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (var-set last-accrual-time stacks-block-height)
+    (var-set current-interest-rate (+ BASE_RATE (/ RATE_SLOPE_1 u2)))
+    
+    ;; Set up initial risk parameters
+    (map-set risk-parameters { risk-level: u10 }
+      { collateral-factor: u9000, interest-multiplier: u8000 }) ;; Low risk: 90% LTV, 80% interest rate
+    (map-set risk-parameters { risk-level: u50 }
+      { collateral-factor: u8000, interest-multiplier: u10000 }) ;; Medium risk: 80% LTV, normal interest
+    (map-set risk-parameters { risk-level: u90 }
+      { collateral-factor: u7000, interest-multiplier: u12000 }) ;; High risk: 70% LTV, 120% interest rate
+    
+    (ok true)
+  )
+)
+
