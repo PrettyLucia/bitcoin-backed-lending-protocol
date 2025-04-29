@@ -66,3 +66,19 @@
     interest-multiplier: uint ;; Interest rate multiplier
   }
 )
+
+;; Protocol health metrics
+(define-data-var bad-debt uint u0)  ;; Uncovered debt from liquidations
+(define-data-var total-liquidations uint u0)  ;; Count of total liquidations
+
+(define-constant ERR_UNAUTHORIZED u1)
+(define-constant ERR_PAUSED u2)
+(define-constant ERR_INVALID_AMOUNT u3)
+(define-constant ERR_INSUFFICIENT_COLLATERAL u4)
+(define-constant ERR_UTILIZATION_TOO_HIGH u5)
+(define-constant ERR_BTC_NOT_VERIFIED u6)
+(define-constant ERR_LOAN_NOT_FOUND u7)
+(define-constant ERR_ALREADY_VERIFIED u8)
+(define-constant ERR_NOT_LIQUIDATABLE u9)
+(define-constant ERR_MIN_BORROW u10)
+(define-constant ERR_INSUFFICIENT_FUNDS u11)
