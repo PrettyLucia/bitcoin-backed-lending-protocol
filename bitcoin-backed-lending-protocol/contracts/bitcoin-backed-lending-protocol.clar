@@ -177,3 +177,44 @@
     (ok true)
   )
 )
+
+;; Multi-Collateral Support Module
+
+;; Asset configuration map
+(define-map supported-assets
+  { asset-id: uint }
+  {
+    asset-type: (string-ascii 10),        ;; "STX", "BTC", "NFT", etc.
+    asset-contract: principal,            ;; Contract address for the asset
+    oracle-contract: principal,           ;; Price oracle contract
+    ltv-ratio: uint,                      ;; Loan-to-value ratio (in basis points)
+    liquidation-threshold: uint,          ;; When position becomes liquidatable (in basis points)
+    liquidation-penalty: uint,            ;; Penalty for liquidation (in basis points)
+    borrowing-enabled: bool,              ;; Can this asset be borrowed against
+    borrow-cap: uint,                     ;; Maximum amount that can be borrowed against this asset
+    reserve-factor: uint                  ;; Portion of interest that goes to reserves (in basis points)
+  }
+)
+
+;; Asset state (for each supported asset)
+(define-map asset-state
+  { asset-id: uint }
+  {
+    total-supplied: uint,                 ;; Total amount supplied of this asset
+    total-borrowed: uint,                 ;; Total amount borrowed against this asset
+    utilization: uint,                    ;; Current utilization ratio (in basis points)
+    interest-rate: uint,                  ;; Current interest rate (in basis points)
+    exchange-rate: uint                   ;; Exchange rate between asset and internal token
+  }
+)
+
+;; Extended user positions to support multiple assets
+(define-map multi-asset-positions
+  { user: principal, asset-id: uint }
+  {
+    supplied-amount: uint,                ;; Amount supplied of this asset
+    borrowed-amount: uint,                ;; Amount borrowed against this asset
+    last-update: uint,                    ;; Last block when interest was calculated
+    ltv-override: uint                    ;; Optional override for LTV (0 means use default)
+  }
+)
