@@ -177,3 +177,236 @@
     (ok true)
   )
 )
+
+;; Multi-Collateral Support Module
+
+;; Asset configuration map
+(define-map supported-assets
+  { asset-id: uint }
+  {
+    asset-type: (string-ascii 10),        ;; "STX", "BTC", "NFT", etc.
+    asset-contract: principal,            ;; Contract address for the asset
+    oracle-contract: principal,           ;; Price oracle contract
+    ltv-ratio: uint,                      ;; Loan-to-value ratio (in basis points)
+    liquidation-threshold: uint,          ;; When position becomes liquidatable (in basis points)
+    liquidation-penalty: uint,            ;; Penalty for liquidation (in basis points)
+    borrowing-enabled: bool,              ;; Can this asset be borrowed against
+    borrow-cap: uint,                     ;; Maximum amount that can be borrowed against this asset
+    reserve-factor: uint                  ;; Portion of interest that goes to reserves (in basis points)
+  }
+)
+
+;; Asset state (for each supported asset)
+(define-map asset-state
+  { asset-id: uint }
+  {
+    total-supplied: uint,                 ;; Total amount supplied of this asset
+    total-borrowed: uint,                 ;; Total amount borrowed against this asset
+    utilization: uint,                    ;; Current utilization ratio (in basis points)
+    interest-rate: uint,                  ;; Current interest rate (in basis points)
+    exchange-rate: uint                   ;; Exchange rate between asset and internal token
+  }
+)
+
+;; Extended user positions to support multiple assets
+(define-map multi-asset-positions
+  { user: principal, asset-id: uint }
+  {
+    supplied-amount: uint,                ;; Amount supplied of this asset
+    borrowed-amount: uint,                ;; Amount borrowed against this asset
+    last-update: uint,                    ;; Last block when interest was calculated
+    ltv-override: uint                    ;; Optional override for LTV (0 means use default)
+  }
+)
+
+;; Asset Registry Functions
+
+;; Add a new supported asset
+(define-public (register-asset 
+               (asset-id uint) 
+               (asset-type (string-ascii 10))
+               (asset-contract principal)
+               (oracle-contract principal)
+               (ltv-ratio uint)
+               (liquidation-threshold uint)
+               (liquidation-penalty uint)
+               (reserve-factor uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (> liquidation-threshold ltv-ratio) (err ERR_INVALID_AMOUNT))
+    (asserts! (<= ltv-ratio u9000) (err ERR_INVALID_AMOUNT)) ;; Max 90% LTV
+    
+    (map-set supported-assets 
+      { asset-id: asset-id }
+      {
+        asset-type: asset-type,
+        asset-contract: asset-contract,
+        oracle-contract: oracle-contract, 
+        ltv-ratio: ltv-ratio,
+        liquidation-threshold: liquidation-threshold,
+        liquidation-penalty: liquidation-penalty,
+        borrowing-enabled: true,
+        borrow-cap: u0,  ;; Unlimited by default
+        reserve-factor: reserve-factor
+      }
+    )
+    
+    (map-set asset-state
+      { asset-id: asset-id }
+      {
+        total-supplied: u0,
+        total-borrowed: u0,
+        utilization: u0,
+        interest-rate: (+ BASE_RATE (/ RATE_SLOPE_1 u2)),
+        exchange-rate: PRECISION  ;; Initial 1:1 exchange rate
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Update asset parameters
+(define-public (update-asset-parameters
+               (asset-id uint)
+               (ltv-ratio uint)
+               (liquidation-threshold uint)
+               (liquidation-penalty uint)
+               (borrowing-enabled bool)
+               (borrow-cap uint)
+               (reserve-factor uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (> liquidation-threshold ltv-ratio) (err ERR_INVALID_AMOUNT))
+    (asserts! (<= ltv-ratio u9000) (err ERR_INVALID_AMOUNT)) ;; Max 90% LTV
+    
+    (let
+      ((asset (unwrap! (map-get? supported-assets { asset-id: asset-id }) (err ERR_INVALID_AMOUNT))))
+      
+      (map-set supported-assets 
+        { asset-id: asset-id }
+        (merge asset {
+          ltv-ratio: ltv-ratio,
+          liquidation-threshold: liquidation-threshold,
+          liquidation-penalty: liquidation-penalty,
+          borrowing-enabled: borrowing-enabled,
+          borrow-cap: borrow-cap,
+          reserve-factor: reserve-factor
+        })
+      )
+    )
+    
+    (ok true)
+  )
+)
+
+;; Supply Asset Function
+(define-public (supply-asset (asset-id uint) (amount uint))
+  (begin
+    (asserts! (not (var-get protocol-paused)) (err ERR_PAUSED))
+    (asserts! (> amount u0) (err ERR_INVALID_AMOUNT))
+    
+    (let
+      (
+        (asset (unwrap! (map-get? supported-assets { asset-id: asset-id }) (err ERR_INVALID_AMOUNT)))
+        (asset-contract (get asset-contract asset))
+        (position-key { user: tx-sender, asset-id: asset-id })
+        (current-position (default-to 
+          { supplied-amount: u0, borrowed-amount: u0, last-update: stacks-block-height, ltv-override: u0 }
+          (map-get? multi-asset-positions position-key)))
+        (new-supplied-amount (+ (get supplied-amount current-position) amount))
+      )
+      
+      ;; Transfer asset from user to contract (implementation depends on asset type)
+      ;; For fungible tokens, we would call a transfer function
+      ;; This is simplified and would need to be adjusted based on asset type
+      ;; (contract-call? asset-contract transfer amount tx-sender (as-contract tx-sender) none)
+      
+      ;; Update user position
+      (map-set multi-asset-positions
+        position-key
+        (merge current-position { 
+          supplied-amount: new-supplied-amount,
+          last-update: stacks-block-height
+        })
+      )
+      
+      ;; Update asset state
+      (let
+        (
+          (current-state (unwrap! (map-get? asset-state { asset-id: asset-id }) (err ERR_INVALID_AMOUNT)))
+          (new-total-supplied (+ (get total-supplied current-state) amount))
+          (new-utilization (if (is-eq new-total-supplied u0)
+                              u0
+                              (mul-div (get total-borrowed current-state) PRECISION new-total-supplied)))
+        )
+        
+        (map-set asset-state
+          { asset-id: asset-id }
+          (merge current-state {
+            total-supplied: new-total-supplied,
+            utilization: new-utilization
+          })
+        )
+      )
+      
+      (ok true)
+    )
+  )
+)
+
+;; Helper to calculate collateral value for a single asset
+(define-private (calculate-asset-collateral-value (asset-id uint) (current-value uint))
+  (let
+    (
+      (position-key { user: tx-sender, asset-id: asset-id })
+      (position (default-to 
+        { supplied-amount: u0, borrowed-amount: u0, last-update: u0, ltv-override: u0 }
+        (map-get? multi-asset-positions position-key)))
+      (supplied-amount (get supplied-amount position))
+      ;; Would need to get the price from oracle here
+      (asset-price u0)  ;; Placeholder
+    )
+    (+ current-value (mul-div supplied-amount asset-price PRECISION))
+  )
+)
+
+;; Flash Loan Service Module
+
+;; Flash loan fee in basis points (0.09%)
+(define-constant FLASH_LOAN_FEE_BPS u9)
+
+;; Flash loan state to prevent re-entrancy
+(define-data-var flash-loan-in-progress bool false)
+(define-data-var flash-loan-user principal 'SP000000000000000000002Q6VF78)
+(define-data-var flash-loan-amount uint u0)
+(define-data-var flash-loan-asset uint u0)
+
+;; Governance System Module
+
+;; Governance token SIP-010 interface (would be defined in a separate contract)
+(define-trait governance-token-trait
+  (
+    (get-balance (principal) (response uint uint))
+    (transfer (uint principal principal (optional (buff 34))) (response bool uint))
+    (get-total-supply () (response uint uint))
+  )
+)
+
+;; Proposal states
+(define-constant PROPOSAL_STATE_PENDING u0)
+(define-constant PROPOSAL_STATE_ACTIVE u1)
+(define-constant PROPOSAL_STATE_CANCELED u2)
+(define-constant PROPOSAL_STATE_DEFEATED u3)
+(define-constant PROPOSAL_STATE_SUCCEEDED u4)
+(define-constant PROPOSAL_STATE_QUEUED u5)
+(define-constant PROPOSAL_STATE_EXPIRED u6)
+(define-constant PROPOSAL_STATE_EXECUTED u7)
+
+;; Governance parameters
+(define-data-var governance-token principal 'SP000000000000000000002Q6VF78)
+(define-data-var proposal-threshold uint u100000000000) ;; 100 governance tokens to create proposal
+(define-data-var voting-period uint u144) ;; ~1 day at 10-minute blocks
+(define-data-var voting-delay uint u72) ;; ~12 hours at 10-minute blocks
+(define-data-var quorum-votes uint u500000000000) ;; 500 governance tokens required for quorum
+(define-data-var timelock-delay uint u288) ;; ~2 days at 10-minute blocks
