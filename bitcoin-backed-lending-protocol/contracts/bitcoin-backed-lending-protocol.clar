@@ -382,3 +382,31 @@
 (define-data-var flash-loan-amount uint u0)
 (define-data-var flash-loan-asset uint u0)
 
+;; Governance System Module
+
+;; Governance token SIP-010 interface (would be defined in a separate contract)
+(define-trait governance-token-trait
+  (
+    (get-balance (principal) (response uint uint))
+    (transfer (uint principal principal (optional (buff 34))) (response bool uint))
+    (get-total-supply () (response uint uint))
+  )
+)
+
+;; Proposal states
+(define-constant PROPOSAL_STATE_PENDING u0)
+(define-constant PROPOSAL_STATE_ACTIVE u1)
+(define-constant PROPOSAL_STATE_CANCELED u2)
+(define-constant PROPOSAL_STATE_DEFEATED u3)
+(define-constant PROPOSAL_STATE_SUCCEEDED u4)
+(define-constant PROPOSAL_STATE_QUEUED u5)
+(define-constant PROPOSAL_STATE_EXPIRED u6)
+(define-constant PROPOSAL_STATE_EXECUTED u7)
+
+;; Governance parameters
+(define-data-var governance-token principal 'SP000000000000000000002Q6VF78)
+(define-data-var proposal-threshold uint u100000000000) ;; 100 governance tokens to create proposal
+(define-data-var voting-period uint u144) ;; ~1 day at 10-minute blocks
+(define-data-var voting-delay uint u72) ;; ~12 hours at 10-minute blocks
+(define-data-var quorum-votes uint u500000000000) ;; 500 governance tokens required for quorum
+(define-data-var timelock-delay uint u288) ;; ~2 days at 10-minute blocks
