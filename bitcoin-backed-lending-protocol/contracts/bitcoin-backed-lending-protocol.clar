@@ -410,3 +410,51 @@
 (define-data-var voting-delay uint u72) ;; ~12 hours at 10-minute blocks
 (define-data-var quorum-votes uint u500000000000) ;; 500 governance tokens required for quorum
 (define-data-var timelock-delay uint u288) ;; ~2 days at 10-minute blocks
+
+;; Proposal data structure
+(define-map proposals
+  { proposal-id: uint }
+  {
+    proposer: principal,
+    description: (string-utf8 500),
+    start-block: uint,
+    end-block: uint,
+    for-votes: uint,
+    against-votes: uint,
+    abstain-votes: uint,
+    canceled: bool,
+    executed: bool,
+    execution-time: uint,
+    actions: (list 10 {
+      target: principal,
+      function-name: (string-ascii 128),
+      function-args: (list 10 (buff 1024))
+    })
+  }
+)
+
+;; Track proposal votes
+(define-map votes
+  { proposal-id: uint, voter: principal }
+  { support: uint, votes: uint } ;; support: 0 = against, 1 = for, 2 = abstain
+)
+
+;; Track delegated voting power
+(define-map delegates
+  { delegator: principal }
+  { delegate: principal }
+)
+
+;; Counter for proposal IDs
+(define-data-var proposal-count uint u0)
+
+;; Function to delegate voting power
+(define-public (delegate (delegate-to principal))
+  (begin
+    (map-set delegates
+      { delegator: tx-sender }
+      { delegate: delegate-to }
+    )
+    (ok true)
+  )
+)
