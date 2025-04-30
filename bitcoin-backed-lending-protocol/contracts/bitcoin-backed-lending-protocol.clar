@@ -610,3 +610,50 @@
   { asset-id: uint, timestamp: uint }
   { rate: uint, utilization: uint }
 )
+
+;; Initialize a new interest rate model
+(define-public (add-interest-rate-model
+               (model-id uint)
+               (model-type uint)
+               (base-rate uint)
+               (slope-1 uint)
+               (slope-2 uint)
+               (optimal-util uint)
+               (max-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (<= model-type u2) (err ERR_INVALID_AMOUNT))  ;; Valid model type
+    (asserts! (<= max-rate u10000) (err ERR_INVALID_AMOUNT))  ;; Max 100% interest rate
+    
+    (map-set interest-rate-models
+      { model-id: model-id }
+      {
+        model-type: model-type,
+        base-rate: base-rate,
+        slope-1: slope-1,
+        slope-2: slope-2,
+        optimal-util: optimal-util,
+        max-rate: max-rate
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Assign an interest rate model to an asset
+(define-public (set-asset-interest-model (asset-id uint) (model-id uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) (err ERR_UNAUTHORIZED))
+    (asserts! (is-some (map-get? interest-rate-models { model-id: model-id })) 
+      (err ERR_INVALID_AMOUNT))
+    
+    (map-set asset-rate-model
+      { asset-id: asset-id }
+      { model-id: model-id }
+    )
+    
+    (ok true)
+  )
+)
+
