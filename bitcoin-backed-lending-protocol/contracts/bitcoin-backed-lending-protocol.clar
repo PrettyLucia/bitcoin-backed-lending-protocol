@@ -370,3 +370,15 @@
     (+ current-value (mul-div supplied-amount asset-price PRECISION))
   )
 )
+
+;; Flash Loan Service Module
+
+;; Flash loan fee in basis points (0.09%)
+(define-constant FLASH_LOAN_FEE_BPS u9)
+
+;; Flash loan state to prevent re-entrancy
+(define-data-var flash-loan-in-progress bool false)
+(define-data-var flash-loan-user principal 'SP000000000000000000002Q6VF78)
+(define-data-var flash-loan-amount uint u0)
+(define-data-var flash-loan-asset uint u0)
+
